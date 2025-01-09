@@ -6,14 +6,12 @@ import LoanApplication from '../models/model.loanApplication.js';
 
 const calculateLoan = asyncHandler(async (req, res) => {
     const loanDetails = req.body;
-    const { principal, EMI, totalPayble, intrestPerMonth, processingFee, tenureMonth } = loanDetails;
+    const { principal, totalPayble, intrestPerMonth, tenureMonth } = loanDetails;
 
     if (
         principal <= 0 ||
-        EMI <= 0 ||
         totalPayble <= 0 ||
         intrestPerMonth <= 0 ||
-        processingFee <= 0 ||
         tenureMonth <= 0
     ) {
         return res.status(400).json({ message: "Invalid input" });
@@ -63,7 +61,7 @@ const addEmploymentInfo = asyncHandler(async (req, res) => {
         "companyName",
         "companyType",
         "designation",
-        "officeAddrress_Line_1",
+        "officeAddrress",
         "city",
         "state",
         "pincode"
