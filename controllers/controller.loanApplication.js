@@ -29,7 +29,7 @@ const calculateLoan = asyncHandler(async (req, res) => {
     let previousLoanApplication = await LoanApplication.findOne({ userId: user._id });
 
     if (previousLoanApplication && previousLoanApplication.applicationStatus=="PENDING"){
-        loanApplication.loanDetails = loanDetails;
+        previousLoanApplication.loanDetails = loanDetails;
         await previousLoanApplication.save();
         return res.status(200).json({ message: "Loan Application updated successfully" });
     }
