@@ -26,8 +26,8 @@ const aadhaarOtp = asyncHandler(async (req, res) => {
     // check if aadhar is already registered then send OTP by SMS gateway
     const userDetails = await User.findOne({ aadarNumber: aadhaar })
     if (userDetails) {
-        if (userDetails.personalDetails && userDetails.personalDetails.mobile) {
-            const mobile = userDetails.personalDetails.mobile
+        if (userDetails && userDetails.mobile) {
+            const mobile = userDetails.mobile
             const otp = generateRandomNumber();
             const result = await otpSent(mobile, otp);
 
@@ -104,6 +104,8 @@ const saveAadhaarDetails = asyncHandler(async (req, res) => {
                 { new: true }
             );
             const token = generateToken(res, UserData._id)
+            UserData.authToken = token
+            await UserData.save();
             return res.status(200).json({
                 success: true,
                 token: token,
@@ -127,6 +129,8 @@ const saveAadhaarDetails = asyncHandler(async (req, res) => {
 
         // generate token 
         const token = generateToken(res, userDetails._id)
+        userDetails.authToken = token
+        await userDetails.save();
         // Respond with a success message
         return res.status(200).json({
             success: true,
@@ -219,8 +223,12 @@ const verifyOtp = asyncHandler(async (req, res) => {
     await otpRecord.save(); // Save the updated OTP record
 
     if(isAlreadyRegisterdUser){
-       const userDetails = await User.findOne({"personalDetails.mobile":mobile})
+       const userDetails = await User.findOne({mobile:mobile})
+       console.log(userDetails, "userDetails")
        const token = generateToken(res, userDetails._id)
+       console.log(token, "token")
+       userDetails.authToken = token
+       await userDetails.save()
         // Respond with a success message
         return res.status(200).json({
             success: true,
@@ -232,7 +240,7 @@ const verifyOtp = asyncHandler(async (req, res) => {
     // update in user model
     const result = await User.findOneAndUpdate(
         {aadarNumber: otpRecord.aadhar},
-        { registrationStatus: "MOBILE_VERIFIED", "personalDetails.mobile": mobile , previousJourney : "AADHAR_VERIFIED" },
+        { registrationStatus: "MOBILE_VERIFIED", mobile: mobile , previousJourney : "AADHAR_VERIFIED" },
         { new: true }
     );
     console.log(result , "result")
@@ -413,6 +421,8 @@ const addIncomeDetails = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: "User not found" });
     }
 
+
+
     let registrationStatus
     let previousJourney
     if(userDetails.registrationStatus=="CURRENT_RESIDENCE"){
@@ -544,19 +554,25 @@ const getProfile = asyncHandler(async (req, res) => {
 })
 
 const getProfileDetails = asyncHandler(async (req, res) => {
+    console.log("me controller me hu , ----->")
     const userId = req.user._id;
+    console.log(userId, "userId")
     const user = await User.findById(userId);
     if (!user) {
         return res.status(404).json({ message: "User not found" });
     }
 
     const data = {
+        mobile:user.mobile,
+        PAN:user.PAN,
+        aadhaarNumber : user.aadarNumber,
         personalDetails: user.personalDetails,
         residence: user.residenceDetails,
         incomeDetails: user.incomeDetails,
         profileImage: user.profileImage,
 
     }
+    console.log(data, "data")
     return res.status(200).json({
         success: true,
         data
@@ -621,7 +637,7 @@ const checkLoanElegblity = asyncHandler(async (req, res) => {
 
 })
 
-const logout  = asyncHandler (async(req,res)=>{
+const logout  = asyncHandler(async(req,res)=>{
     res.cookie('jwt', '', {
         httpOnly: true,
         expires: new Date(0)
