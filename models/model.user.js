@@ -11,15 +11,17 @@ const personalDetailsSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    maritalStatus: {
+      type: String,
+      enum : ["MARRIED", "SINGLE", "DIVORCED"],
+    },
     personalEmail: {
       type: String,
     },
     spouseName: {
       type: String,
     }
-  },
-  { _id: false }
-);
+});
 
 
 const residenceSchema = new mongoose.Schema({
@@ -127,7 +129,35 @@ const userSchema = new mongoose.Schema(
     },
     authToken:{
       type :String
-    }
+    },
+    isAadharVerify:{
+      type : Boolean,
+      default : false
+    },
+    isMobileVerify:{
+      type : Boolean,
+      default : false
+    },
+    isPanVerify:{
+      type : Boolean,
+      default : false
+    },
+    isProfileImage:{
+      type : Boolean,
+      default : false
+    },
+    isPersonalDetails:{
+      type : Boolean,
+      default : false
+    },
+    isCurrentResidence:{
+      type : Boolean,
+      default : false
+    },
+    isIncomDetails:{
+      type : Boolean,
+      default : false
+    },
 
   },
   { timestamps: true }
