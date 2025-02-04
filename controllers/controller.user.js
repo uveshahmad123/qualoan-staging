@@ -595,7 +595,7 @@ const getDashboardDetails = asyncHandler(async (req, res) => {
     return res.status(200).json({
         success: true,
         message: "Application status fetched successfully",
-        isRegistration: false,
+        isRegistration: true,
         applicationStatus: loanApplication.applicationStatus,
         progressStatus: loanApplication.progressStatus,
         isLoanCalculated : loanApplication.isLoanCalculated,
