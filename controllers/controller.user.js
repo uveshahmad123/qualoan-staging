@@ -426,7 +426,8 @@ const addIncomeDetails = asyncHandler(async (req, res) => {
     userDetails.previousJourney = previousJourney
     userDetails.isIncomDetails = true
     await userDetails.save();
-
+    // update for date format
+    userDetails.incomeDetails.nextSalaryDate = userDetails.incomeDetails.nextSalaryDate?.toISOString().split('T')[0];
     res.status(200).json({ message: "Income details updated successfully", incomeDetails: userDetails.incomeDetails });
 })
 
@@ -536,6 +537,8 @@ const getProfileDetails = asyncHandler(async (req, res) => {
     if (!user) {
         return res.status(404).json({ message: "User not found" });
     }
+    // update for date format
+    user.incomeDetails.nextSalaryDate = user.incomeDetails.nextSalaryDate?.toISOString().split('T')[0];
 
     const data = {
         mobile: user.mobile,
