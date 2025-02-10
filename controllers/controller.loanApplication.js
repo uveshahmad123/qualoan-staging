@@ -1,22 +1,28 @@
-import asyncHandler from '../middleware/asyncHandler.js';
-import User from '../models/model.user.js';
-import LoanApplication from '../models/model.loanApplication.js';
-import Documents from '../models/model.document.js';
-import { getDocs } from "../utils/docsUploadAndFetch.js"
-import UserStatus from '../models/model.userStatus.js';
-
+import asyncHandler from '../../middleware/asyncHandler.js';
+import User from '../../models/User/model.user.js';
+import LoanApplication from '../../models/User/model.loanApplication.js';
+import Documents from '../../models/Documents.js';
+import Lead from '../../models/Leads.js'
+import LeadStatus from '../../models/LeadStatus.js'
+import { nextSequence } from "../../utils/nextSequence.js";
+import { postLogs } from "../../Controllers/logs.js"
+import checkUploadedDocuments from "../../utils/User/isDocumentUploaded.js"
+import splitName from "../../utils/splitName.js"
+import { postUserLogs } from './controller.userLogs.js';
+import UserStatus from '../../models/User/model.userStatus.js';
+import { getDocs } from '../../utils/User/docsUploadAndFetch.js';
 
 
 
 const calculateLoan = asyncHandler(async (req, res) => {
     const loanDetails = req.body;
-    const { principal, totalPayble, intrestPerMonth, tenureMonth } = loanDetails;
+    const { principle, totalPayble, roi, tenure } = loanDetails;
 
     if (
-        principal <= 0 ||
+        principle <= 0 ||
         totalPayble <= 0 ||
-        intrestPerMonth <= 0 ||
-        tenureMonth <= 0
+        roi <= 0 ||
+        tenure <= 0
     ) {
         return res.status(400).json({ message: "Invalid input" });
     }
@@ -30,22 +36,17 @@ const calculateLoan = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: "firstly please complete your registration" })
     }
 
-    let previousLoanApplication = await LoanApplication.findOne({ userId: user._id });
+    let loanApplication
+    let previousLoanApplication = await LoanApplication.findOne({ userId: user._id }).sort({ createdAt: -1 });
 
-    if (previousLoanApplication && previousLoanApplication.applicationStatus == "PENDING") {
+    if (previousLoanApplication) {
         previousLoanApplication.loanDetails = loanDetails;
+        isLoanAlreadyCalculated.isLoanCalculated = true
         await previousLoanApplication.save();
+        loanApplication = previousLoanApplication
         return res.status(200).json({ message: "Loan Application updated successfully" });
     }
 
-    let loanApplication;
-    const isLoanAlreadyCalculated = await LoanApplication.findOne({ userId: user._id })
-    if (isLoanAlreadyCalculated) {
-        isLoanAlreadyCalculated.loanDetails = loanDetails
-        isLoanAlreadyCalculated.isLoanCalculated = true
-        await isLoanAlreadyCalculated.save()
-
-    }
     else {
         loanApplication = await LoanApplication.create({
             userId: user._id,
@@ -53,10 +54,6 @@ const calculateLoan = asyncHandler(async (req, res) => {
             loanDetails
         });
 
-    }
-
-    if (!loanApplication) {
-        return res.status(400).json({ message: "Loan Application not created" });
     }
 
     return res.status(200).json({ message: "Loan Application created successfully", loanApplication: loanApplication.loanDetails });
@@ -92,9 +89,9 @@ const addEmploymentInfo = asyncHandler(async (req, res) => {
         });
     }
 
-    const loanDetails = await LoanApplication.findOneAndUpdate(
-        { userId: userId, applicationStatus: "PENDING" }
-    )
+    const loanDetails = await LoanApplication.findOne(
+        { userId: userId },
+    ).sort({ createdAt: -1 });
 
     if (!loanDetails) {
         return res.status(400).json({ message: "Loan Application not found" })
@@ -114,7 +111,7 @@ const addEmploymentInfo = asyncHandler(async (req, res) => {
 
 
     const addEmploymentInfo = await LoanApplication.findOneAndUpdate(
-        { userId: userId, applicationStatus: "PENDING" },
+        { userId: userId},
         {
             $set: {
                 employeeDetails: employeInfo,
@@ -125,7 +122,8 @@ const addEmploymentInfo = asyncHandler(async (req, res) => {
         },
 
         {
-            new: true
+            new: true,
+            sort: { createdAt: -1 }
 
         }
     );
@@ -133,6 +131,7 @@ const addEmploymentInfo = asyncHandler(async (req, res) => {
     if (!addEmploymentInfo) {
         return res.status(400).json({ message: "Employment Info not added" });
     }
+    await postUserLogs(userId, `User add employment info`)
     return res.status(200).json({ message: "Employment Info added successfully", EmploymentInfo: addEmploymentInfo.employeeDetails });
 });
 
@@ -144,9 +143,9 @@ const disbursalBankDetails = asyncHandler(async (req, res) => {
     }
 
 
-    const loanDetails = await LoanApplication.findOneAndUpdate(
-        { userId: userId, applicationStatus: "PENDING" }
-    )
+    const loanDetails = await LoanApplication.findOne(
+        { userId: userId }
+    ).sort({ createdAt: -1 });
 
     if (!loanDetails) {
         return res.status(400).json({ message: "Loan Application not found" })
@@ -173,11 +172,13 @@ const disbursalBankDetails = asyncHandler(async (req, res) => {
                 progressStatus: progressStatus,
                 previousJourney: previousJourney,
                 isDisbursalDetailsSaved: true
+
             }
         },
 
         {
-            new: true
+            new: true,
+            sort: { createdAt: -1 }
 
         }
     );
@@ -185,7 +186,110 @@ const disbursalBankDetails = asyncHandler(async (req, res) => {
     if (!addBankDetails) {
         return res.status(400).json({ message: "Bank Details not added" });
     }
-    return res.status(200).json({ message: "Bank Details added successfully", bankDetails: addBankDetails.disbursalBankDetails });
+    await postUserLogs(userId, `User add bank  disbursal details`)
+
+    const userDetails = await User.findById(userId)
+    let docs;
+    let pan = userDetails.PAN
+    const exisitingDoc = await Documents.findOne({ pan: userDetails.PAN });
+    if (exisitingDoc) {
+        docs = exisitingDoc;
+    } else {
+        docs = await Documents.create({
+            pan: pan,
+        });
+    }
+
+    const isDocumentUploaded = checkUploadedDocuments(docs.document)
+    if (!isDocumentUploaded.isComplete) {
+        return res.status(400).json({ message: "Please upload all documents", missingDocument: isDocumentUploaded.missingDocuments })
+    }
+
+    // pass extraObject In Lead
+    const personalDetails = userDetails.personalDetails
+    const employeDetails = loanDetails.employeeDetails
+    const disbursalBankDetails = loanDetails.disbursalBankDetails
+    const residenceDetails = userDetails.residenceDetails
+    const incomeDetails = userDetails.incomeDetails
+
+
+
+
+    // logic of creating lead
+
+    const { fName, mName, lName } = splitName(userDetails.personalDetails.fullName)
+
+
+    const leadNo = await nextSequence("leadNo", "QUALED", 10);
+
+    const leadStatus = await LeadStatus.create({
+        pan: pan,
+        leadNo,
+        isInProcess: true,
+    });
+
+
+    const [day, month, year] = userDetails.personalDetails.dob.split('-');
+    const dob = new Date(`${year}-${month}-${day}`);
+    const newLead = await Lead.create({
+        userId,
+        fName: fName,
+        mName: mName,
+        lName: lName,
+        gender: userDetails.personalDetails.gender,
+        dob: dob,
+        leadNo,
+        aadhaar: userDetails.aadarNumber,
+        pan: userDetails.PAN,
+        documents: docs._id.toString(),
+        mobile: String(userDetails.mobile),
+        alternateMobile: userDetails.alternateMobile ? String(alternateMobile) : "",
+        personalEmail: userDetails.personalDetails.personalEmail ? userDetails.personalDetails.personalEmail : "",
+        officeEmail: loanDetails.employeeDetails.officeEmail ? loanDetails.employeeDetails.officeEmail : "",
+        loanAmount: loanDetails.loanDetails.principle,
+        salary: userDetails.incomeDetails.monthlyIncome,
+        pinCode: userDetails.residenceDetails.pincode,
+        state: userDetails.residenceDetails.state,
+        city: userDetails.residenceDetails.city,
+        source: userDetails.platformType,
+        leadStatus: leadStatus._id,
+        isAadhaarVerified: true,
+        isAadhaarDetailsSaved: true,
+        isPanVerified: true,
+        isEmailVerified: true,
+        isMobileVerified: true,
+        extraDetails: {
+            personalDetails,
+            employeDetails,
+            disbursalBankDetails,
+            residenceDetails,
+            incomeDetails
+        }
+    });
+
+    if (!newLead) {
+        res.status(400).json({ message: "Lead not created" });
+        throw new Error("Lead not created!!!");
+    }
+
+    await UserStatus.create({
+        userId: userId,
+        leadNo: newLead.leadNo,
+        loanApplicationId: loanDetails._id,
+        pan: userDetails.PAN
+    })
+
+    // viewLeadsLog(req, res, status || '', borrower || '', leadRemarks = '');
+    const logs = await postLogs(
+        newLead._id,
+        "NEW LEAD",
+        `${newLead.fName}${newLead.mName && ` ${newLead.mName}`}${newLead.lName && ` ${newLead.lName}`
+        }`,
+        "New lead created"
+    );
+
+
+    return res.status(200).json({ message: "Loan Applied successfully!", newLead, logs });
 });
 
 const getApplicationStatus = asyncHandler(async (req, res) => {
@@ -196,7 +300,7 @@ const getApplicationStatus = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: "User not found" });
     }
 
-    const loanDetails = await LoanApplication.findOne({ userId: userId, applicationStatus: "PENDING" });
+    const loanDetails = await LoanApplication.findOne({ userId: userId }).sort({ createdAt: -1 });
     if (!loanDetails) {
         return res.status(400).json({ message: "Loan Application not found" });
     }
@@ -212,7 +316,10 @@ const getApplicationDetails = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: "Invalid input" });
     }
 
-    const loanApplicationDetails = await LoanApplication.findOne({ userId, applicationStatus: "PENDING" });
+    const loanApplicationDetails = await LoanApplication.findOne(
+        { userId}
+    ).sort({ createdAt: -1 });
+
     if (!loanApplicationDetails) {
         return res.status(400).json({ message: "Loan Application not found" });
     }
@@ -321,6 +428,8 @@ const getDocumentStatus = asyncHandler(async (req, res) => {
 
 })
 
+
+
 const getDocumentList = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
@@ -373,6 +482,62 @@ const getDocumentList = asyncHandler(async (req, res) => {
     return res.status(200).json({ documents: [] });
 });
 
+
+// FOR RETURN ONLY MAX 3 MULTIPLE DOCUMENT
+/*
+const getDocumentList = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    // Fetch user details to get PAN
+    const userDetails = await User.findById(userId);
+    if (!userDetails || !userDetails.PAN) {
+        return res.status(404).json({ message: "User or PAN not found" });
+    }
+
+    // Find the documents by PAN
+    const result = await Documents.findOne(
+        { pan: userDetails.PAN }, 
+        {
+            "document.singleDocuments": 1,
+            "document.multipleDocuments": 1,
+        }
+    );
+
+    if (result) {
+        // Process `singleDocuments`
+        const singleDocuments = result.document.singleDocuments.map(doc => ({
+            id: doc._id || null,
+            name: doc.name,
+            type: doc.type || null,
+            url: doc.url || null,
+        }));
+
+        // Process `multipleDocuments` and limit to max 3 per type
+        const multipleDocuments = [];
+        const multipleDocs = result.document.multipleDocuments;
+
+        for (const [key, docsArray] of Object.entries(multipleDocs)) {
+            docsArray.slice(0, 3).forEach(doc => { // Take only the first 3 documents of each type
+                multipleDocuments.push({
+                    id: doc._id || null,
+                    name: doc.name,
+                    type: key, // Use the key (e.g., bankStatement, salarySlip) as the type
+                    url: doc.url || null,
+                });
+            });
+        }
+
+        // Combine both lists into one array
+        const allDocuments = [...multipleDocuments, ...singleDocuments];
+
+        return res.status(200).json({ documents: allDocuments });
+    }
+
+    // Return an empty array if no documents match the given PAN
+    return res.status(200).json({ documents: [] });
+});
+*/
+
 const documentPreview = asyncHandler(async (req, res) => {
 
     const { docType } = req.query;
@@ -401,7 +566,8 @@ const documentPreview = asyncHandler(async (req, res) => {
 
 const getJourney = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const journey = await UserStatus.findOne({ userId: userId });
+    const loanDetails = await LoanApplication.findOne({ userId: userId }).sort({ createdAt: -1 });
+    const journey = await UserStatus.findOne({ userId: userId , loanApplicationId:loanDetails._id });
     if (!journey) {
         return res.status(400).json({ message: "Loan Application not found" });
     }
