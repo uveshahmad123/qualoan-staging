@@ -427,8 +427,13 @@ const addIncomeDetails = asyncHandler(async (req, res) => {
     userDetails.isIncomDetails = true
     await userDetails.save();
     // update for date format
-    userDetails.incomeDetails.nextSalaryDate = userDetails.incomeDetails.nextSalaryDate?.toISOString().split('T')[0];
-    res.status(200).json({ message: "Income details updated successfully", incomeDetails: userDetails.incomeDetails });
+    const formattedIncomeDetails = {
+        ...userDetails.incomeDetails.toObject(),
+        nextSalaryDate: userDetails.incomeDetails.nextSalaryDate
+            ? userDetails.incomeDetails.nextSalaryDate.toISOString().split("T")[0]
+            : null
+    };
+    res.status(200).json({ message: "Income details updated successfully", incomeDetails: formattedIncomeDetails });
 })
 
 const uploadProfile = asyncHandler(async (req, res) => {
@@ -538,7 +543,9 @@ const getProfileDetails = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: "User not found" });
     }
     // update for date format
-    user.incomeDetails.nextSalaryDate = user.incomeDetails.nextSalaryDate?.toISOString().split('T')[0];
+    const formattedNextSalaryDate = user.incomeDetails.nextSalaryDate 
+    ? user.incomeDetails.nextSalaryDate.toISOString().split('T')[0] 
+    : null;
 
     const data = {
         mobile: user.mobile,
@@ -546,7 +553,10 @@ const getProfileDetails = asyncHandler(async (req, res) => {
         aadhaarNumber: user.aadarNumber,
         personalDetails: user.personalDetails,
         residence: user.residenceDetails,
-        incomeDetails: user.incomeDetails,
+        incomeDetails: {
+            ...user.incomeDetails,
+            nextSalaryDate: formattedNextSalaryDate,
+        },
         profileImage: user.profileImage,
 
     }
