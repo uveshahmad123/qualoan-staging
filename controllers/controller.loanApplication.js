@@ -332,7 +332,7 @@ const getDocumentList = asyncHandler(async (req, res) => {
 
     // Find the documents by PAN
     const result = await Documents.findOne(
-        { pan: userDetails.PAN }, // Match the document using the `pan` field
+        { pan: userDetails.PAN }, 
         {
             "document.singleDocuments": 1,
             "document.multipleDocuments": 1,
@@ -342,22 +342,23 @@ const getDocumentList = asyncHandler(async (req, res) => {
     if (result) {
         // Process `singleDocuments`
         const singleDocuments = result.document.singleDocuments.map(doc => ({
-            id: doc._id || null, // Include `_id` if available
+            id: doc._id || null,
             name: doc.name,
-            type: doc.type || null, // Handle cases where type might not exist
-            url: doc.url || null, // Handle cases where url might not exist
+            type: doc.type || null,
+            url: doc.url || null,
         }));
 
-        // Process `multipleDocuments`
+        // Process `multipleDocuments` and limit to max 3 per type
         const multipleDocuments = [];
         const multipleDocs = result.document.multipleDocuments;
+
         for (const [key, docsArray] of Object.entries(multipleDocs)) {
-            docsArray.forEach(doc => {
+            docsArray.slice(0, 3).forEach(doc => { // Take only the first 3 documents of each type
                 multipleDocuments.push({
-                    id: doc._id || null, // Include `_id` if available
+                    id: doc._id || null,
                     name: doc.name,
                     type: key, // Use the key (e.g., bankStatement, salarySlip) as the type
-                    url: doc.url || null, // Handle cases where url might not exist
+                    url: doc.url || null,
                 });
             });
         }
@@ -370,7 +371,7 @@ const getDocumentList = asyncHandler(async (req, res) => {
 
     // Return an empty array if no documents match the given PAN
     return res.status(200).json({ documents: [] });
-})
+});
 
 const documentPreview = asyncHandler(async (req, res) => {
 
